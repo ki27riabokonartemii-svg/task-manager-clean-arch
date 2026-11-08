@@ -1,3 +1,4 @@
+using System.Text.Json;
 using TaskManager.Domain.Entities;
 using TaskManager.Domain.Interfaces;
 
@@ -5,40 +6,65 @@ namespace TaskManager.Infrastructure.Repositories;
 
 public class JsonTaskRepository : ITaskRepository
 {
-    private readonly List<TaskItem> _tasks = new();
+    private readonly string _filePath;
 
-    public Task<IEnumerable<TaskItem>> GetAllAsync()
+    public JsonTaskRepository(string filePath = "tasks.json")
     {
-        return Task.FromResult<IEnumerable<TaskItem>>(_tasks);
-    }
-
-    public Task<TaskItem?> GetByIdAsync(int id)
-    {
-        return Task.FromResult(_tasks.FirstOrDefault(t => t.Id == id));
-    }
-
-    public Task AddAsync(TaskItem task)
-    {
-        task.Id = _tasks.Count + 1;
-        _tasks.Add(task);
-        return Task.CompletedTask;
-    }
-
-    public Task UpdateAsync(TaskItem task)
-    {
-        var existing = _tasks.FirstOrDefault(t => t.Id == task.Id);
-        if (existing != null)
+        _filePath = filePath;
+        if (!File.Exists(_filePath))
         {
-            existing.Title = task.Title;
-            existing.Description = task.Description;
-            existing.IsCompleted = task.IsCompleted;
+            File.WriteAllText(_filePath, "[]");
         }
-        return Task.CompletedTask;
     }
 
-    public Task DeleteAsync(int id)
+    private async Task<List<TaskItem>> LoadTasksAsync()
     {
-        _tasks.RemoveAll(t => t.Id == id);
-        return Task.CompletedTask;
+        var json = await File.ReadAllTextAsync(_filePath);
+        return JsonSerializer.Deserialize<List<TaskItem>>(json) ?? new List<TaskItem>();
+    }
+
+    private async Task SaveTasksAsync(List<TaskItem> tasks)
+    {
+        var json = JsonSerializer.Serialize(tasks, new JsonSerializerOptions { WriteIndented = true });
+        await File.WriteAllTextAsync(_filePath, json);
+    }
+
+    public async Task<TaskItem?> GetByIdAsync(int id)
+    {
+        var tasks = await LoadTasksAsync();
+        return tasks.FirstOrDefault(t => t.Id == id);
+    }
+
+    public async Task<IEnumerable<TaskItem>> GetAllAsync()
+    {
+        return await LoadTasksAsync();
+    }
+
+    public async Task AddAsync(TaskItem task)
+    {
+        var tasks = await LoadTasksAsync();
+        int newId = tasks.Any() ? tasks.Max(t => t.Id) + 1 : 1;
+        
+        var newTask = new TaskItem(newId, task.Title, task.Description);
+        tasks.Add(newTask);
+        await SaveTasksAsync(tasks);
+    }
+
+    public async Task UpdateAsync(TaskItem task)
+    {
+        var tasks = await LoadTasksAsync();
+        var index = tasks.FindIndex(t => t.Id == task.Id);
+        if (index != -1)
+        {
+            tasks[index] = task;
+            await SaveTasksAsync(tasks);
+        }
+    }
+
+    public async Task DeleteAsync(int id)
+    {
+        var tasks = await LoadTasksAsync();
+        tasks.RemoveAll(t => t.Id == id);
+        await SaveTasksAsync(tasks);
     }
 }

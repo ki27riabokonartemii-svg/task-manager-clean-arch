@@ -44,9 +44,8 @@ public class JsonTaskRepository : ITaskRepository
     {
         var tasks = await LoadTasksAsync();
         int newId = tasks.Any() ? tasks.Max(t => t.Id) + 1 : 1;
-        
-        var newTask = new TaskItem(newId, task.Title, task.Description);
-        tasks.Add(newTask);
+        task.Id = newId;
+        tasks.Add(task);
         await SaveTasksAsync(tasks);
     }
 
